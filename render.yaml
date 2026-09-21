@@ -15,8 +15,7 @@ services:
     branch: main
     autoDeployTrigger: commit
     buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm run build
-    preDeployCommand: pnpm run db:migrate
-    startCommand: pnpm start
+    startCommand: pnpm run db:migrate && pnpm start
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
