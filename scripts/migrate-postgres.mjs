@@ -65,6 +65,18 @@ try {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       UNIQUE (owner_id, month)
     )`;
+    await tx`CREATE TABLE IF NOT EXISTS calendar_feeds (
+      id TEXT PRIMARY KEY,
+      owner_id TEXT NOT NULL,
+      property_id TEXT NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
+      provider TEXT NOT NULL CHECK (provider IN ('airbnb', 'vrbo')),
+      url TEXT NOT NULL,
+      events JSONB NOT NULL DEFAULT '[]'::jsonb,
+      synced_at TIMESTAMPTZ,
+      attempted_at TIMESTAMPTZ,
+      sync_error TEXT,
+      UNIQUE(owner_id, property_id, provider)
+    )`;
     await tx`CREATE INDEX IF NOT EXISTS properties_owner_idx ON properties(owner_id)`;
     await tx`CREATE INDEX IF NOT EXISTS transactions_owner_date_idx ON transactions(owner_id, date DESC)`;
     await tx`CREATE INDEX IF NOT EXISTS occupancy_owner_month_idx ON occupancy(owner_id, month DESC)`;
