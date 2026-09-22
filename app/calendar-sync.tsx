@@ -148,8 +148,9 @@ export function CalendarSync({ properties, month }: { properties: Property[]; mo
 
   async function updateBooking(event: FormEvent<HTMLFormElement>, booking: Booking) {
     event.preventDefault();
+    const editor = event.currentTarget.closest('details');
     const form = new FormData(event.currentTarget);
-    await change({ action: 'update_booking', id: booking.id, guestName: form.get('guestName'), payout: form.get('payout'), notes: form.get('notes'), start: form.get('start') || booking.start, end: form.get('end') || booking.end }, 'Booking details saved.');
+    if (await change({ action: 'update_booking', id: booking.id, guestName: form.get('guestName'), payout: form.get('payout'), notes: form.get('notes'), start: form.get('start') || booking.start, end: form.get('end') || booking.end }, 'Booking details saved.')) editor?.removeAttribute('open');
   }
 
   const selectedFeeds = feeds.filter(feed => feed.propertyId === propertyId);
