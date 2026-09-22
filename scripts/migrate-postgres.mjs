@@ -77,9 +77,32 @@ try {
       sync_error TEXT,
       UNIQUE(owner_id, property_id, provider)
     )`;
+    await tx`CREATE TABLE IF NOT EXISTS cleaner_settings (
+      owner_id TEXT PRIMARY KEY,
+      cleaner_name TEXT NOT NULL DEFAULT '',
+      default_fee DOUBLE PRECISION NOT NULL DEFAULT 0 CHECK (default_fee >= 0),
+      share_token TEXT NOT NULL UNIQUE,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )`;
+    await tx`CREATE TABLE IF NOT EXISTS cleaning_jobs (
+      id TEXT PRIMARY KEY,
+      owner_id TEXT NOT NULL,
+      property_id TEXT NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
+      source_key TEXT NOT NULL,
+      checkout_date DATE NOT NULL,
+      fee DOUBLE PRECISION NOT NULL DEFAULT 0 CHECK (fee >= 0),
+      status TEXT NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'completed', 'paid', 'cancelled')),
+      completed_at TIMESTAMPTZ,
+      paid_at TIMESTAMPTZ,
+      transaction_id TEXT REFERENCES transactions(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE(owner_id, source_key)
+    )`;
     await tx`CREATE INDEX IF NOT EXISTS properties_owner_idx ON properties(owner_id)`;
     await tx`CREATE INDEX IF NOT EXISTS transactions_owner_date_idx ON transactions(owner_id, date DESC)`;
     await tx`CREATE INDEX IF NOT EXISTS occupancy_owner_month_idx ON occupancy(owner_id, month DESC)`;
+    await tx`CREATE INDEX IF NOT EXISTS cleaning_jobs_owner_date_idx ON cleaning_jobs(owner_id, checkout_date)`;
   });
   console.log("PostgreSQL schema is ready.");
 } finally {

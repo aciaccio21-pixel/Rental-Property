@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { CalendarSync } from "./calendar-sync";
+import { CleanerSchedule } from "./cleaner-schedule";
 import {
   Area,
   AreaChart,
@@ -984,6 +985,7 @@ export function RentalDashboard({ displayName }: { displayName: string }) {
 
             <TabsContent value="occupancy" className="mt-0 space-y-6">
               <CalendarSync properties={data.properties} month={selectedMonth} />
+              <CleanerSchedule onLedgerChange={load} />
               <div>
                 <p className="text-sm font-semibold uppercase tracking-[.12em] text-[#8a6112]">Short-term rentals</p>
                 <h2 className="mt-1 text-2xl font-bold">Occupancy & vacancy</h2>
