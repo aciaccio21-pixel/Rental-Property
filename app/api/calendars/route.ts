@@ -85,9 +85,9 @@ export async function POST(request: Request) {
       if (!property) return Response.json({ error: 'Choose one of your properties.' }, { status: 400 });
       if (!start || !end || end <= start) return Response.json({ error: 'Checkout must be after arrival.' }, { status: 400 });
       if (payout === null) return Response.json({ error: 'Enter a valid payout amount.' }, { status: 400 });
-      const [conflict] = await sql`SELECT id FROM calendar_bookings WHERE owner_id = ${owner} AND property_id = ${propertyId} AND active = true
+      const [conflict] = await sql`SELECT id FROM calendar_bookings WHERE owner_id = ${owner} AND property_id = ${propertyId} AND provider = 'private' AND active = true
         AND arrival_date < ${end} AND checkout_date > ${start} LIMIT 1`;
-      if (conflict) return Response.json({ error: 'Those dates overlap another booking for this property.' }, { status: 400 });
+      if (conflict) return Response.json({ error: 'Those dates overlap another private booking for this property.' }, { status: 400 });
       const id = crypto.randomUUID();
       await sql`INSERT INTO calendar_bookings
         (id, owner_id, property_id, source_key, provider, arrival_date, checkout_date, guest_name, payout, notes)
@@ -102,9 +102,9 @@ export async function POST(request: Request) {
       if (booking.provider === 'private') {
         const start = isoDate(input.start), end = isoDate(input.end);
         if (!start || !end || end <= start) return Response.json({ error: 'Checkout must be after arrival.' }, { status: 400 });
-        const [conflict] = await sql`SELECT id FROM calendar_bookings WHERE owner_id = ${owner} AND id != ${id} AND property_id = (SELECT property_id FROM calendar_bookings WHERE id = ${id})
+        const [conflict] = await sql`SELECT id FROM calendar_bookings WHERE owner_id = ${owner} AND id != ${id} AND provider = 'private' AND property_id = (SELECT property_id FROM calendar_bookings WHERE id = ${id})
           AND active = true AND arrival_date < ${end} AND checkout_date > ${start} LIMIT 1`;
-        if (conflict) return Response.json({ error: 'Those dates overlap another booking for this property.' }, { status: 400 });
+        if (conflict) return Response.json({ error: 'Those dates overlap another private booking for this property.' }, { status: 400 });
         await sql`UPDATE calendar_bookings SET arrival_date = ${start}, checkout_date = ${end}, guest_name = ${shortText(input.guestName)}, payout = ${payout}, notes = ${shortText(input.notes, 500)}, updated_at = now()
           WHERE id = ${id} AND owner_id = ${owner}`;
       } else {

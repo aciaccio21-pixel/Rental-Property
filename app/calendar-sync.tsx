@@ -201,6 +201,7 @@ export function CalendarSync({ properties, month }: { properties: Property[]; mo
         <div className="space-y-2"><Label htmlFor="private-start">Arrival</Label><Input id="private-start" name="start" type="date" required /></div>
         <div className="space-y-2"><Label htmlFor="private-end">Checkout</Label><Input id="private-end" name="end" type="date" required /></div>
         <div className="space-y-2 md:col-span-2"><Label htmlFor="private-notes">Notes</Label><Textarea id="private-notes" name="notes" placeholder="Phone number, payment notes, or special requests" /></div>
+        <p className="text-sm text-muted-foreground md:col-span-2">Private bookings can use dates you blocked on Airbnb or Vrbo. The app still prevents two private bookings from overlapping.</p>
         <Button className="md:col-span-2" disabled={busy || !propertyId} type="submit">Add private booking to {selectedProperty}</Button>
       </form>
     </details>
