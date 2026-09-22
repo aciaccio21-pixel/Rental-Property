@@ -12,6 +12,10 @@ test('folded labels, blocked dates, cancellation and duplicate UID',()=>{
   const events = parseCalendar(wrap(event('a','20260901','20260903','SUMMARY:Not avai\r\n lable')+'\r\n'+event('a','20260901','20260903','SUMMARY:Not available')+'\r\n'+event('b','20260904','20260906','STATUS:CANCELLED')));
   assert.equal(events.length,1); assert.equal(events[0].kind,'blocked');
 });
+test('Airbnb not-available entries with reservation details are bookings',()=>{
+  const [booking] = parseCalendar(wrap(event('reservation','20261001','20261004','SUMMARY:Airbnb (Not available)\r\nDESCRIPTION:Reservation URL: https://www.airbnb.com/hosting/reservations/details/example')));
+  assert.equal(booking.kind, 'reservation');
+});
 test('empty calendars work but broken calendars cannot clear saved dates',()=>{
   assert.deepEqual(parseCalendar(wrap('')),[]);
   assert.throws(()=>parseCalendar('<html>Error</html>'));
