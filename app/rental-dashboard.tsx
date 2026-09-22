@@ -198,6 +198,18 @@ function lastMonths(count: number) {
   return result;
 }
 
+function selectableMonths(pastCount = 12, futureCount = 18) {
+  const result: string[] = [];
+  const date = new Date();
+  date.setDate(1);
+  for (let offset = futureCount; offset >= -pastCount; offset -= 1) {
+    const copy = new Date(date);
+    copy.setMonth(copy.getMonth() + offset);
+    result.push(`${copy.getFullYear()}-${String(copy.getMonth() + 1).padStart(2, "0")}`);
+  }
+  return result;
+}
+
 function quarterMonths(month: string) {
   const [year, monthNumber] = month.split("-").map(Number);
   const start = Math.floor((monthNumber - 1) / 3) * 3 + 1;
@@ -433,7 +445,7 @@ export function RentalDashboard({ displayName }: { displayName: string }) {
   ).sort((a, b) => b[1] - a[1]);
 
   const recentTransactions = monthTransactions.slice(0, 8);
-  const monthOptions = lastMonths(18).reverse();
+  const monthOptions = selectableMonths();
 
   function exportCsv() {
     const headers = [
