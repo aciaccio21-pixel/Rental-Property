@@ -13,6 +13,7 @@ type Feed = { id: string; propertyId: string; provider: string; events: FeedEven
 type Booking = { id: string; propertyId: string; provider: 'airbnb' | 'vrbo' | 'private'; start: string; end: string; guestName: string; payout: number; notes: string; providerTitle: string };
 type Property = { id: string; name: string };
 type CalendarData = { feeds: Feed[]; bookings: Booking[] };
+type CalendarEntry = { id: string; start: string; end: string; provider: string; guestName?: string; blocked?: boolean };
 
 function money(value: number) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
@@ -20,6 +21,62 @@ function money(value: number) {
 
 function nights(start: string, end: string) {
   return Math.max(0, Math.round((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86400000));
+}
+
+function addDays(value: string, count: number) {
+  const date = new Date(`${value}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + count);
+  return date.toISOString().slice(0, 10);
+}
+
+function monthWeeks(month: string) {
+  const first = `${month}-01`;
+  const firstDay = new Date(`${first}T00:00:00Z`).getUTCDay();
+  const gridStart = addDays(first, -firstDay);
+  const daysInMonth = new Date(Date.UTC(Number(month.slice(0,4)), Number(month.slice(5,7)), 0)).getUTCDate();
+  const weekCount = Math.ceil((firstDay + daysInMonth) / 7);
+  return Array.from({ length: weekCount }, (_, week) => Array.from({ length: 7 }, (_, day) => addDays(gridStart, week * 7 + day)));
+}
+
+function barColors(entry: CalendarEntry) {
+  if (entry.blocked) return 'bg-[#7b8794] text-white';
+  if (entry.provider === 'vrbo') return 'bg-[#2874a6] text-white';
+  if (entry.provider === 'private') return 'bg-[#2f7d69] text-white';
+  return 'bg-[#173f5f] text-white';
+}
+
+function BookingMonth({ month, entries }: { month: string; entries: CalendarEntry[] }) {
+  const weeks = monthWeeks(month);
+  return <div className="overflow-x-auto rounded-xl border bg-white">
+    <div className="min-w-[760px]">
+      <div className="grid grid-cols-7 border-b bg-[#f3f6f8] text-center text-xs font-bold uppercase tracking-wide text-[#536170]">
+        {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(day => <div key={day} className="py-2">{day}</div>)}
+      </div>
+      {weeks.map((week, weekIndex) => {
+        const weekStart = week[0], weekEnd = addDays(week[6], 1);
+        const segments = entries
+          .filter(entry => entry.start < weekEnd && entry.end > weekStart)
+          .sort((a,b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end));
+        return <div key={weekStart} className="relative grid min-h-[126px] grid-cols-7 border-b last:border-b-0">
+          {week.map(day => <div key={day} className={`border-r p-2 last:border-r-0 ${day.startsWith(month) ? 'bg-white' : 'bg-[#f7f8f9] text-[#a1a9b2]'}`}><span className={`grid size-7 place-items-center rounded-full text-sm font-bold ${day === new Date().toISOString().slice(0,10) ? 'bg-[#f4c15d] text-[#173f5f]' : ''}`}>{Number(day.slice(-2))}</span></div>)}
+          <div className="pointer-events-none absolute inset-x-0 top-10 grid grid-cols-7">
+            {segments.slice(0, 3).map((entry, lane) => {
+              const segmentStart = entry.start > weekStart ? entry.start : weekStart;
+              const segmentEnd = entry.end < weekEnd ? entry.end : weekEnd;
+              const startColumn = Math.round((Date.parse(`${segmentStart}T00:00:00Z`) - Date.parse(`${weekStart}T00:00:00Z`)) / 86400000) + 1;
+              const span = Math.max(1, Math.round((Date.parse(`${segmentEnd}T00:00:00Z`) - Date.parse(`${segmentStart}T00:00:00Z`)) / 86400000));
+              const beginsHere = entry.start >= weekStart;
+              const endsHere = entry.end <= weekEnd;
+              return <div key={`${entry.id}-${weekIndex}`} style={{ gridColumn: `${startColumn} / span ${span}`, gridRow: '1', marginTop: `${lane * 26}px` }} className={`mx-0.5 flex h-6 min-w-0 items-center gap-1 overflow-hidden px-2 text-xs font-bold shadow-sm ${barColors(entry)} ${beginsHere ? 'rounded-l-full' : ''} ${endsHere ? 'rounded-r-full' : ''}`} title={`${entry.blocked ? 'Owner block' : entry.guestName || 'Guest details needed'} · ${entry.provider} · ${entry.start} to ${entry.end}`}>
+                <span className="shrink-0 uppercase opacity-80">{entry.blocked ? 'Block' : entry.provider}</span>
+                <span className="truncate">{entry.blocked ? 'Unavailable' : entry.guestName || 'Guest details needed'}</span>
+              </div>;
+            })}
+          </div>
+        </div>;
+      })}
+    </div>
+  </div>;
 }
 
 export function CalendarSync({ properties, month }: { properties: Property[]; month: string }) {
@@ -106,8 +163,11 @@ export function CalendarSync({ properties, month }: { properties: Property[]; mo
   const bookedNights = calendarNights(visibleBookings, month);
   const expectedPayout = bookingPayoutForMonth(selectedBookings, month);
   const detailsNeeded = visibleBookings.filter(booking => !booking.guestName || Number(booking.payout) === 0).length;
-  const days = new Date(Date.UTC(Number(month.slice(0,4)), Number(month.slice(5,7)), 0)).getUTCDate();
   const selectedProperty = properties.find(property => property.id === propertyId)?.name || 'property';
+  const visualEntries: CalendarEntry[] = [
+    ...selectedBookings.map(booking => ({ id: booking.id, start: booking.start, end: booking.end, provider: booking.provider, guestName: booking.guestName })),
+    ...blocked.map(event => ({ id: `${event.provider}:${event.uid}`, start: event.start, end: event.end, provider: event.provider, blocked: true })),
+  ];
 
   return <section className="space-y-6 rounded-2xl border bg-white p-5 shadow-sm">
     <div><h3 className="text-xl font-bold">Booking calendars</h3><p className="mt-1 text-sm text-muted-foreground">See guest names, dates, and expected payouts for each property. Airbnb and Vrbo dates refresh automatically; add guest and payout details when the provider feed leaves them out.</p></div>
@@ -145,12 +205,9 @@ export function CalendarSync({ properties, month }: { properties: Property[]; mo
     </details>
 
     <div>
-      <p className="font-bold">{blockedNights} unavailable nights in {month} <span className="text-sm font-normal">({bookedNights} booked)</span></p>
-      <div className="mt-3 grid grid-cols-7 gap-2" aria-label={`Unavailable nights in ${month}`}>{Array.from({length:days},(_,index)=>{
-        const day = `${month}-${String(index+1).padStart(2,'0')}`;
-        const entries = calendarEntries.filter(event => event.start <= day && event.end > day);
-        return <div key={day} title={entries.length ? entries.map(event => 'guestName' in event ? `${event.guestName || 'Reservation'} (${event.provider})` : `${event.provider}: blocked`).join('; ') : 'Available'} className={`rounded-md border p-2 text-center font-bold ${entries.length ? 'bg-[#173f5f] text-white' : 'bg-white text-[#173f5f]'}`}>{index+1}</div>;
-      })}</div>
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-3"><div><h4 className="font-bold">{selectedProperty} · {month}</h4><p className="text-sm text-muted-foreground">Bars begin on arrival and end at checkout.</p></div><p className="text-sm font-bold">{blockedNights} unavailable nights · {bookedNights} booked</p></div>
+      <div className="mb-3 flex flex-wrap gap-2 text-xs font-bold"><span className="rounded-full bg-[#173f5f] px-3 py-1 text-white">Airbnb</span><span className="rounded-full bg-[#2874a6] px-3 py-1 text-white">VRBO</span><span className="rounded-full bg-[#2f7d69] px-3 py-1 text-white">Private</span><span className="rounded-full bg-[#7b8794] px-3 py-1 text-white">Owner block</span></div>
+      <BookingMonth month={month} entries={visualEntries} />
     </div>
 
     <div className="space-y-3">
