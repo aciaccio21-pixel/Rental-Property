@@ -247,6 +247,7 @@ export function RentalDashboard({ displayName }: { displayName: string }) {
   const [data, setData] = useState<PortfolioData>(emptyData);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [propertySaveError, setPropertySaveError] = useState("");
   const [error, setError] = useState("");
   const [tab, setTab] = useState("overview");
   const [selectedMonth, setSelectedMonth] = useState(currentMonth());
@@ -261,7 +262,7 @@ export function RentalDashboard({ displayName }: { displayName: string }) {
   const load = useCallback(async () => {
     try {
       setError("");
-      const response = await fetch("/api/portfolio", { cache: "no-store" });
+      const response = await fetch("/api/portfolio", { cache: "no-store", signal: AbortSignal.timeout(30000) });
       const result = (await response.json()) as PortfolioData & { error?: string };
       if (!response.ok) throw new Error(result.error || "Could not load the portfolio.");
       setData(result);
@@ -293,15 +294,18 @@ export function RentalDashboard({ displayName }: { displayName: string }) {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(30000),
       });
       const result = (await response.json()) as PortfolioData & { error?: string };
       if (!response.ok) throw new Error(result.error || "Could not save the change.");
       setData(result);
       return result;
     } catch (saveError) {
-      const message = saveError instanceof Error ? saveError.message : "Could not save the change.";
+      const message = saveError instanceof Error && (saveError.name === "TimeoutError" || saveError.name === "AbortError")
+        ? "The server took too long to respond. Your entries are still here. Check the property list before retrying, as the save may have completed."
+        : saveError instanceof Error ? saveError.message : "Could not save the change.";
       toast.error(message);
-      throw saveError;
+      throw new Error(message);
     } finally {
       setSaving(false);
     }
@@ -493,19 +497,25 @@ export function RentalDashboard({ displayName }: { displayName: string }) {
 
   async function submitProperty(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (saving) return;
+    setPropertySaveError("");
     const form = new FormData(event.currentTarget);
-    await mutate({
-      action: "create_property",
-      name: form.get("name"),
-      groupName: form.get("groupName"),
-      rentalType: form.get("rentalType"),
-      address: form.get("address"),
-      tenantName: form.get("tenantName"),
-      monthlyRent: form.get("monthlyRent"),
-      estimatedMonthlyCosts: form.get("estimatedMonthlyCosts"),
-    });
-    setPropertyOpen(false);
-    toast.success("Property added");
+    try {
+      await mutate({
+        action: "create_property",
+        name: form.get("name"),
+        groupName: form.get("groupName"),
+        rentalType: form.get("rentalType"),
+        address: form.get("address"),
+        tenantName: form.get("tenantName"),
+        monthlyRent: form.get("monthlyRent"),
+        estimatedMonthlyCosts: form.get("estimatedMonthlyCosts"),
+      });
+      setPropertyOpen(false);
+      toast.success("Property added");
+    } catch (saveError) {
+      setPropertySaveError(saveError instanceof Error ? saveError.message : "Could not save the property. Your entries are still here.");
+    }
   }
 
   async function updateProperty(event: FormEvent<HTMLFormElement>) {
@@ -646,6 +656,7 @@ export function RentalDashboard({ displayName }: { displayName: string }) {
           </div>
           <TabsList
             variant="line"
+            data-rental-navigation
             className="scrollbar-none flex w-full justify-start overflow-x-auto rounded-none border-t border-[#315672] bg-transparent px-3 py-2 md:h-auto md:flex-col md:items-stretch md:border-t-0 md:px-4 md:py-3"
           >
             {navItems.map((item) => (
@@ -1161,7 +1172,8 @@ export function RentalDashboard({ displayName }: { displayName: string }) {
                           <Input id="estimated-costs" name="estimatedMonthlyCosts" type="number" min="0" step="0.01" placeholder="0.00" />
                         </div>
                       </div>
-                      <DialogFooter><Button type="submit" disabled={saving}>{saving && <Loader2 className="size-4 animate-spin" />} Add rental</Button></DialogFooter>
+                      {propertySaveError && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-800">{propertySaveError}</p>}
+                      <DialogFooter><Button type="submit" disabled={saving} aria-busy={saving}>{saving && <Loader2 className="size-4 animate-spin" />}{saving ? "Saving rental…" : "Add rental"}</Button></DialogFooter>
                     </form>
                   </DialogContent>
                 </Dialog>

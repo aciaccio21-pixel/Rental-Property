@@ -88,7 +88,36 @@ body {
   color: var(--foreground);
   font-family: "Avenir Next", Avenir, Arial, sans-serif;
 }
-button, input, select, textarea { font: inherit; }
+button, input, select, textarea { font-family: inherit; }
+
+/* Keep navigation readable regardless of system theme and shared tab styles. */
+[data-rental-navigation] [data-slot="tabs-trigger"] {
+  color: #ffffff;
+  background: #173f5f;
+  font-size: 16px;
+  font-weight: 700;
+  border: 1px solid #557892;
+}
+[data-rental-navigation] [data-slot="tabs-trigger"]:hover {
+  color: #ffffff;
+  background: #245779;
+}
+[data-rental-navigation] [data-slot="tabs-trigger"][data-state="active"] {
+  color: #ffffff;
+  background: #245779;
+  border: 2px solid #f0b84b;
+  box-shadow: inset 4px 0 #f0b84b;
+}
+[data-rental-navigation] [data-slot="tabs-trigger"] svg {
+  color: #f0b84b;
+}
+[data-slot="button"] {
+  font-weight: 700;
+}
+[data-slot="button"][data-variant="outline"],
+[data-slot="button"][data-variant="ghost"] {
+  color: #173f5f;
+}
 ::selection { background: #f3d390; color: #172033; }
 
 .ledger-grid {
