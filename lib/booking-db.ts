@@ -32,6 +32,14 @@ export async function reconcileImportedBookings(ownerId: string, onlyFeedId?: st
     for (const row of rows) {
       if (!activeKeys.has(row.sourceKey)) await sql`UPDATE calendar_bookings SET active = false, updated_at = now() WHERE id = ${row.id}`;
     }
+    await sql`UPDATE transactions AS t SET property_id = b.property_id, amount = b.payout,
+        date = b.checkout_date, category = 'Airbnb / Vrbo',
+        counterparty = CASE WHEN b.guest_name <> '' THEN b.guest_name ELSE initcap(b.provider) END,
+        payment_method = initcap(b.provider),
+        notes = CASE WHEN b.notes <> '' THEN b.notes ELSE 'Booking payout for ' || b.arrival_date::text || ' to ' || b.checkout_date::text END
+      FROM calendar_bookings AS b
+      WHERE b.owner_id = ${ownerId} AND b.feed_id = ${feed.id} AND b.active = true
+        AND t.owner_id = ${ownerId} AND t.id = 'booking-payout:' || b.id`;
   }
 }
 

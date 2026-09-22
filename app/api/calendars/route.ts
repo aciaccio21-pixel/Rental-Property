@@ -4,12 +4,33 @@ import { getSql } from '@/lib/postgres';
 import { calendarUrl, fetchCalendar } from '@/lib/calendar.mjs';
 
 export const dynamic = 'force-dynamic';
+type Sql = ReturnType<typeof getSql>;
 const shortText = (value: unknown, max = 160) => typeof value === 'string' ? value.trim().slice(0, max) : '';
 const isoDate = (value: unknown) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || '')) ? String(value) : '';
 const amount = (value: unknown) => {
   const result = Number(value);
   return Number.isFinite(result) && result >= 0 && result <= 1_000_000 ? Math.round(result * 100) / 100 : null;
 };
+
+async function syncPayoutTransaction(sql: Sql, owner: string, bookingId: string) {
+  const [booking] = await sql`SELECT id, property_id AS "propertyId", provider, arrival_date::text AS "start",
+      checkout_date::text AS "end", guest_name AS "guestName", payout, notes
+    FROM calendar_bookings WHERE id = ${bookingId} AND owner_id = ${owner}`;
+  const transactionId = `booking-payout:${bookingId}`;
+  if (!booking || Number(booking.payout) <= 0) {
+    await sql`DELETE FROM transactions WHERE id = ${transactionId} AND owner_id = ${owner}`;
+    return;
+  }
+  const category = booking.provider === 'private' ? 'Direct booking' : 'Airbnb / Vrbo';
+  const platform = booking.provider === 'private' ? 'Private booking' : String(booking.provider).replace(/^./, (letter) => letter.toUpperCase());
+  await sql`INSERT INTO transactions
+      (id, owner_id, property_id, kind, amount, date, category, counterparty, payment_method, notes, tax_treatment, receipt_on_file, is_demo, created_at)
+    VALUES (${transactionId}, ${owner}, ${booking.propertyId}, 'income', ${Number(booking.payout)}, ${booking.end}, ${category},
+      ${booking.guestName || platform}, ${platform}, ${booking.notes || `Booking payout for ${booking.start} to ${booking.end}`}, 'income', false, false, now())
+    ON CONFLICT(id) DO UPDATE SET property_id = EXCLUDED.property_id, amount = EXCLUDED.amount, date = EXCLUDED.date,
+      category = EXCLUDED.category, counterparty = EXCLUDED.counterparty, payment_method = EXCLUDED.payment_method,
+      notes = EXCLUDED.notes, tax_treatment = 'income', is_demo = false`;
+}
 
 async function dashboard(owner: string, reconcile = true) {
   const sql = getSql();
@@ -71,6 +92,7 @@ export async function POST(request: Request) {
       await sql`INSERT INTO calendar_bookings
         (id, owner_id, property_id, source_key, provider, arrival_date, checkout_date, guest_name, payout, notes)
         VALUES (${id}, ${owner}, ${propertyId}, ${`private:${id}`}, 'private', ${start}, ${end}, ${shortText(input.guestName)}, ${payout}, ${shortText(input.notes, 500)})`;
+      await syncPayoutTransaction(sql, owner, id);
     } else if (input.action === 'update_booking') {
       const id = String(input.id || '');
       const payout = amount(input.payout);
@@ -89,8 +111,11 @@ export async function POST(request: Request) {
         await sql`UPDATE calendar_bookings SET guest_name = ${shortText(input.guestName)}, payout = ${payout}, notes = ${shortText(input.notes, 500)}, updated_at = now()
           WHERE id = ${id} AND owner_id = ${owner}`;
       }
+      await syncPayoutTransaction(sql, owner, id);
     } else if (input.action === 'delete_private') {
-      await sql`DELETE FROM calendar_bookings WHERE id = ${String(input.id || '')} AND owner_id = ${owner} AND provider = 'private'`;
+      const id = String(input.id || '');
+      await sql`DELETE FROM transactions WHERE id = ${`booking-payout:${id}`} AND owner_id = ${owner}`;
+      await sql`DELETE FROM calendar_bookings WHERE id = ${id} AND owner_id = ${owner} AND provider = 'private'`;
     } else return Response.json({ error: 'Unknown calendar action.' }, { status: 400 });
     return Response.json(await dashboard(owner, false));
   } catch (error) {

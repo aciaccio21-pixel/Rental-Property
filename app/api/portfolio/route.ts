@@ -107,7 +107,9 @@ export async function POST(request: Request) {
         VALUES (${crypto.randomUUID()}, ${ownerId}, ${month}, 'closed', ${cleanText(payload.notes, 500)}, ${now}, ${now})
         ON CONFLICT(owner_id, month) DO UPDATE SET status = 'closed', notes = EXCLUDED.notes, closed_at = EXCLUDED.closed_at, updated_at = EXCLUDED.updated_at`;
     } else if (action === "delete_transaction") {
-      await sql`DELETE FROM transactions WHERE id = ${cleanText(payload.id, 80)} AND owner_id = ${ownerId}`;
+      const id = cleanText(payload.id, 80);
+      if (id.startsWith("booking-payout:")) return Response.json({ error: "Edit booking payouts from Occupancy." }, { status: 400 });
+      await sql`DELETE FROM transactions WHERE id = ${id} AND owner_id = ${ownerId}`;
     } else if (action === "clear_starter") {
       await sql.begin(async (tx) => {
         await tx`DELETE FROM transactions WHERE owner_id = ${ownerId} AND is_demo = true`;

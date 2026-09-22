@@ -123,6 +123,18 @@ try {
     await tx`CREATE INDEX IF NOT EXISTS occupancy_owner_month_idx ON occupancy(owner_id, month DESC)`;
     await tx`CREATE INDEX IF NOT EXISTS cleaning_jobs_owner_date_idx ON cleaning_jobs(owner_id, checkout_date)`;
     await tx`CREATE INDEX IF NOT EXISTS calendar_bookings_owner_dates_idx ON calendar_bookings(owner_id, arrival_date, checkout_date)`;
+    await tx`INSERT INTO transactions
+        (id, owner_id, property_id, kind, amount, date, category, counterparty, payment_method, notes, tax_treatment, receipt_on_file, is_demo, created_at)
+      SELECT 'booking-payout:' || id, owner_id, property_id, 'income', payout, checkout_date,
+        CASE WHEN provider = 'private' THEN 'Direct booking' ELSE 'Airbnb / Vrbo' END,
+        CASE WHEN guest_name <> '' THEN guest_name WHEN provider = 'private' THEN 'Private booking' ELSE initcap(provider) END,
+        CASE WHEN provider = 'private' THEN 'Private booking' ELSE initcap(provider) END,
+        CASE WHEN notes <> '' THEN notes ELSE 'Booking payout for ' || arrival_date::text || ' to ' || checkout_date::text END,
+        'income', false, false, now()
+      FROM calendar_bookings WHERE payout > 0
+      ON CONFLICT(id) DO UPDATE SET property_id = EXCLUDED.property_id, amount = EXCLUDED.amount, date = EXCLUDED.date,
+        category = EXCLUDED.category, counterparty = EXCLUDED.counterparty, payment_method = EXCLUDED.payment_method,
+        notes = EXCLUDED.notes, tax_treatment = 'income', is_demo = false`;
   });
   console.log("PostgreSQL schema is ready.");
 } finally {

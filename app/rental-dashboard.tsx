@@ -292,6 +292,12 @@ export function RentalDashboard({ displayName }: { displayName: string }) {
   }, [load]);
 
   useEffect(() => {
+    const refreshForBookings = () => void load();
+    window.addEventListener("rental-bookings-changed", refreshForBookings);
+    return () => window.removeEventListener("rental-bookings-changed", refreshForBookings);
+  }, [load]);
+
+  useEffect(() => {
     if (!data.properties.length) {
       if (selectedPropertyId) setSelectedPropertyId("");
       return;
@@ -1415,11 +1421,11 @@ function TransactionTable({
                 {row.kind === "income" ? "+" : "−"}{money(Number(row.amount))}
               </TableCell>
               <TableCell>
-                <Button variant="ghost" size="icon" aria-label="Delete transaction" onClick={() => {
-                  if (window.confirm("Delete this transaction?")) onDelete(row.id);
-                }}>
-                  <Trash2 className="size-4 text-muted-foreground" />
-                </Button>
+                {row.id.startsWith("booking-payout:") ? <Badge variant="outline" className="text-[11px]">Booking</Badge> : <Button variant="ghost" size="icon" aria-label="Delete transaction" onClick={() => {
+                    if (window.confirm("Delete this transaction?")) onDelete(row.id);
+                  }}>
+                    <Trash2 className="size-4 text-muted-foreground" />
+                  </Button>}
               </TableCell>
             </TableRow>
           ))}
