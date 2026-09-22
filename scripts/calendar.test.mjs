@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { calendarUrl, parseCalendar, calendarNights } from '../lib/calendar.mjs';
+import { bookingPayoutForMonth, calendarUrl, parseCalendar, calendarNights } from '../lib/calendar.mjs';
 const wrap = events => `BEGIN:VCALENDAR\r\nVERSION:2.0\r\n${events}\r\nEND:VCALENDAR`;
 const event = (id, start, end, extra='') => `BEGIN:VEVENT\r\nUID:${id}\r\nDTSTART;VALUE=DATE:${start}\r\nDTEND;VALUE=DATE:${end}\r\n${extra}\r\nEND:VEVENT`;
 test('checkout is exclusive and overlapping channels count once',()=>{
@@ -21,4 +21,12 @@ test('only provider export URLs are fetched',()=>{
   assert.equal(calendarUrl('https://www.airbnb.com/calendar/ical/123.ics?s=test','airbnb'),'https://www.airbnb.com/calendar/ical/123.ics?s=test');
   assert.equal(calendarUrl('https://www.vrbo.com/icalendar/123.ics','vrbo'),'https://www.vrbo.com/icalendar/123.ics');
   for (const url of ['http://127.0.0.1/ical/x','https://www.airbnb.com.evil.test/ical/x','https://user:pass@www.airbnb.com/ical/x','https://www.airbnb.com/rooms/123']) assert.throws(()=>calendarUrl(url,'airbnb'));
+});
+test('payout totals count each booking in its checkout month',()=>{
+  const bookings = [
+    { start:'2026-09-29', end:'2026-10-03', payout:500 },
+    { start:'2026-10-20', end:'2026-10-23', payout:750 },
+  ];
+  assert.equal(bookingPayoutForMonth(bookings, '2026-09'), 0);
+  assert.equal(bookingPayoutForMonth(bookings, '2026-10'), 1250);
 });

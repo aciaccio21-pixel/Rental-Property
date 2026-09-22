@@ -46,7 +46,9 @@ export function CleanerSchedule({ onLedgerChange }: { onLedgerChange: () => Prom
 
   useEffect(() => {
     const initial = window.setTimeout(() => void request().catch(failure => setError(failure instanceof Error ? failure.message : 'Could not load the cleaner schedule.')), 0);
-    return () => window.clearTimeout(initial);
+    const refresh = () => void request().catch(failure => setError(failure instanceof Error ? failure.message : 'Could not load the cleaner schedule.'));
+    window.addEventListener('rental-bookings-changed', refresh);
+    return () => { window.clearTimeout(initial); window.removeEventListener('rental-bookings-changed', refresh); };
   }, [request]);
 
   async function change(body: Record<string, unknown>, success: string) {

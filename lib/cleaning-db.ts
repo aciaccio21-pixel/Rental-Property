@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { cleaningCandidates } from './cleanings.mjs';
+import { cleaningCandidatesFromBookings } from './cleanings.mjs';
 import { getSql } from './postgres';
 
 export async function ensureCleanerSettings(ownerId: string) {
@@ -11,8 +11,9 @@ export async function reconcileCleaningJobs(ownerId: string) {
   const sql = getSql();
   await ensureCleanerSettings(ownerId);
   const [settings] = await sql`SELECT default_fee AS "defaultFee" FROM cleaner_settings WHERE owner_id = ${ownerId}`;
-  const feeds = await sql`SELECT id, property_id AS "propertyId", events FROM calendar_feeds WHERE owner_id = ${ownerId}`;
-  const candidates = cleaningCandidates(feeds);
+  const bookings = await sql`SELECT source_key AS "sourceKey", property_id AS "propertyId", checkout_date::text AS "checkoutDate", active
+    FROM calendar_bookings WHERE owner_id = ${ownerId} AND active = true`;
+  const candidates = cleaningCandidatesFromBookings(bookings) as Array<{ sourceKey: string; propertyId: string; checkoutDate: string }>;
   for (const item of candidates) {
     await sql`INSERT INTO cleaning_jobs (id, owner_id, property_id, source_key, checkout_date, fee)
       VALUES (${crypto.randomUUID()}, ${ownerId}, ${item.propertyId}, ${item.sourceKey}, ${item.checkoutDate}, ${Number(settings?.defaultFee) || 0})

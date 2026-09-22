@@ -84,6 +84,25 @@ try {
       share_token TEXT NOT NULL UNIQUE,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )`;
+    await tx`CREATE TABLE IF NOT EXISTS calendar_bookings (
+      id TEXT PRIMARY KEY,
+      owner_id TEXT NOT NULL,
+      property_id TEXT NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
+      feed_id TEXT REFERENCES calendar_feeds(id) ON DELETE CASCADE,
+      source_key TEXT NOT NULL,
+      provider TEXT NOT NULL CHECK (provider IN ('airbnb', 'vrbo', 'private')),
+      arrival_date DATE NOT NULL,
+      checkout_date DATE NOT NULL,
+      guest_name TEXT NOT NULL DEFAULT '',
+      payout DOUBLE PRECISION NOT NULL DEFAULT 0 CHECK (payout >= 0),
+      notes TEXT NOT NULL DEFAULT '',
+      provider_title TEXT NOT NULL DEFAULT '',
+      active BOOLEAN NOT NULL DEFAULT true,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      CHECK (checkout_date > arrival_date),
+      UNIQUE(owner_id, source_key)
+    )`;
     await tx`CREATE TABLE IF NOT EXISTS cleaning_jobs (
       id TEXT PRIMARY KEY,
       owner_id TEXT NOT NULL,
@@ -103,6 +122,7 @@ try {
     await tx`CREATE INDEX IF NOT EXISTS transactions_owner_date_idx ON transactions(owner_id, date DESC)`;
     await tx`CREATE INDEX IF NOT EXISTS occupancy_owner_month_idx ON occupancy(owner_id, month DESC)`;
     await tx`CREATE INDEX IF NOT EXISTS cleaning_jobs_owner_date_idx ON cleaning_jobs(owner_id, checkout_date)`;
+    await tx`CREATE INDEX IF NOT EXISTS calendar_bookings_owner_dates_idx ON calendar_bookings(owner_id, arrival_date, checkout_date)`;
   });
   console.log("PostgreSQL schema is ready.");
 } finally {
