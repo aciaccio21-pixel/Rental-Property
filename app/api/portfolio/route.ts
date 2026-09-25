@@ -67,6 +67,40 @@ export async function POST(request: Request) {
         VALUES (${crypto.randomUUID()}, ${ownerId}, ${propertyId}, ${kind}, ${amountValue(payload.amount)}, ${date}, ${category},
         ${cleanText(payload.counterparty)}, ${cleanText(payload.paymentMethod, 80)}, ${cleanText(payload.notes, 500)},
         ${kind === "income" ? "income" : cleanText(payload.taxTreatment, 30) || "review"}, ${Boolean(payload.receiptOnFile)}, false, ${now})`;
+    } else if (action === "create_shared_expense") {
+      const propertyIds = Array.isArray(payload.propertyIds)
+        ? [...new Set(payload.propertyIds.map((id) => cleanText(id, 80)).filter(Boolean))]
+        : [];
+      const date = cleanText(payload.date, 10), category = cleanText(payload.category, 80);
+      if (propertyIds.length < 2 || !date || !category)
+        return Response.json({ error: "Choose at least two properties and complete the bill details." }, { status: 400 });
+      const properties = await sql`SELECT id FROM properties WHERE owner_id = ${ownerId} AND id = ANY(${propertyIds})`;
+      if (properties.length !== propertyIds.length)
+        return Response.json({ error: "One or more properties could not be found." }, { status: 404 });
+
+      const total = amountValue(payload.amount);
+      const totalCents = Math.round(total * 100);
+      if (totalCents < propertyIds.length)
+        return Response.json({ error: "The bill total is too small to divide among those properties." }, { status: 400 });
+      const baseCents = Math.floor(totalCents / propertyIds.length);
+      const remainder = totalCents % propertyIds.length;
+      const enteredNotes = cleanText(payload.notes, 500);
+      const allocationNote = `Shared bill total $${total.toFixed(2)} split equally across ${propertyIds.length} properties.`;
+      const notes = cleanText(enteredNotes ? `${allocationNote} ${enteredNotes}` : allocationNote, 500);
+      const counterparty = cleanText(payload.counterparty);
+      const paymentMethod = cleanText(payload.paymentMethod, 80);
+      const taxTreatment = cleanText(payload.taxTreatment, 30) || "review";
+      const receiptOnFile = Boolean(payload.receiptOnFile);
+
+      await sql.begin(async (tx) => {
+        for (const [index, propertyId] of propertyIds.entries()) {
+          const allocatedAmount = (baseCents + (index < remainder ? 1 : 0)) / 100;
+          await tx`INSERT INTO transactions
+            (id, owner_id, property_id, kind, amount, date, category, counterparty, payment_method, notes, tax_treatment, receipt_on_file, is_demo, created_at)
+            VALUES (${crypto.randomUUID()}, ${ownerId}, ${propertyId}, 'expense', ${allocatedAmount}, ${date}, ${category},
+            ${counterparty}, ${paymentMethod}, ${notes}, ${taxTreatment}, ${receiptOnFile}, false, ${now})`;
+        }
+      });
     } else if (action === "create_property") {
       const name = cleanText(payload.name, 120), rentalType = cleanText(payload.rentalType, 30);
       if (!name || !["long_term", "short_term", "mixed"].includes(rentalType))

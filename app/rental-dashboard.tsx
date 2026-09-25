@@ -272,6 +272,8 @@ export function RentalDashboard({ displayName }: { displayName: string }) {
   const [propertyDetailsOpen, setPropertyDetailsOpen] = useState(false);
   const [reportPeriod, setReportPeriod] = useState<"month" | "quarter">("month");
   const [transactionKind, setTransactionKind] = useState<"income" | "expense">("income");
+  const [expenseAllocation, setExpenseAllocation] = useState<"single" | "shared">("single");
+  const [sharedPropertyIds, setSharedPropertyIds] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     try {
@@ -498,10 +500,16 @@ export function RentalDashboard({ displayName }: { displayName: string }) {
   async function submitTransaction(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
+    const isSharedExpense = transactionKind === "expense" && expenseAllocation === "shared";
+    if (isSharedExpense && sharedPropertyIds.length < 2) {
+      toast.error("Choose at least two properties for a shared bill.");
+      return;
+    }
     await mutate({
-      action: "create_transaction",
+      action: isSharedExpense ? "create_shared_expense" : "create_transaction",
       kind: transactionKind,
       propertyId: form.get("propertyId"),
+      propertyIds: isSharedExpense ? sharedPropertyIds : undefined,
       amount: form.get("amount"),
       date: form.get("date"),
       category: form.get("category"),
@@ -512,7 +520,8 @@ export function RentalDashboard({ displayName }: { displayName: string }) {
       notes: form.get("notes"),
     });
     setTransactionOpen(false);
-    toast.success(transactionKind === "income" ? "Income recorded" : "Expense recorded");
+    setSharedPropertyIds([]);
+    toast.success(transactionKind === "income" ? "Income recorded" : isSharedExpense ? `Bill split across ${sharedPropertyIds.length} properties` : "Expense recorded");
   }
 
   async function submitProperty(event: FormEvent<HTMLFormElement>) {
@@ -751,25 +760,77 @@ export function RentalDashboard({ displayName }: { displayName: string }) {
                           <button
                             key={kind}
                             type="button"
-                            onClick={() => setTransactionKind(kind)}
+                            onClick={() => {
+                              setTransactionKind(kind);
+                              if (kind === "income") setExpenseAllocation("single");
+                            }}
                             className={`rounded-lg px-4 py-2.5 text-sm font-semibold capitalize transition ${transactionKind === kind ? "bg-white text-[#173f5f] shadow-sm" : "text-muted-foreground"}`}
                           >
                             {kind}
                           </button>
                         ))}
                       </div>
-                      <div className="grid gap-4 sm:grid-cols-2">
+                      {transactionKind === "expense" && (
                         <div className="space-y-2">
-                          <Label htmlFor="entry-property">Property</Label>
-                          <Select name="propertyId" required>
-                            <SelectTrigger id="entry-property" className="w-full"><SelectValue placeholder="Choose property" /></SelectTrigger>
-                            <SelectContent>
-                              {data.properties.map((property) => (
-                                <SelectItem key={property.id} value={property.id}>{property.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <Label>Apply this bill to</Label>
+                          <div className="grid grid-cols-2 gap-2 rounded-xl border bg-slate-50 p-1">
+                            {(["single", "shared"] as const).map((allocation) => (
+                              <button
+                                key={allocation}
+                                type="button"
+                                onClick={() => setExpenseAllocation(allocation)}
+                                className={`rounded-lg px-3 py-2.5 text-sm font-semibold transition ${expenseAllocation === allocation ? "bg-white text-[#173f5f] shadow-sm" : "text-slate-600"}`}
+                              >
+                                {allocation === "single" ? "One property" : "Split across properties"}
+                              </button>
+                            ))}
+                          </div>
                         </div>
+                      )}
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        {expenseAllocation !== "shared" || transactionKind !== "expense" ? (
+                          <div className="space-y-2">
+                            <Label htmlFor="entry-property">Property</Label>
+                            <Select name="propertyId" required>
+                              <SelectTrigger id="entry-property" className="w-full"><SelectValue placeholder="Choose property" /></SelectTrigger>
+                              <SelectContent>
+                                {data.properties.map((property) => (
+                                  <SelectItem key={property.id} value={property.id}>{property.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        ) : (
+                          <div className="space-y-2 sm:col-span-2">
+                            <div className="flex items-center justify-between gap-3">
+                              <Label>Properties sharing this bill</Label>
+                              <button
+                                type="button"
+                                className="text-xs font-semibold text-[#173f5f] underline-offset-2 hover:underline"
+                                onClick={() => setSharedPropertyIds(sharedPropertyIds.length === data.properties.length ? [] : data.properties.map((property) => property.id))}
+                              >
+                                {sharedPropertyIds.length === data.properties.length ? "Clear all" : "Select all"}
+                              </button>
+                            </div>
+                            <div className="grid gap-2 rounded-xl border p-3 sm:grid-cols-2">
+                              {data.properties.map((property) => (
+                                <label key={property.id} className="flex cursor-pointer items-start gap-3 rounded-lg px-2 py-2 hover:bg-slate-50">
+                                  <input
+                                    type="checkbox"
+                                    checked={sharedPropertyIds.includes(property.id)}
+                                    onChange={(event) => setSharedPropertyIds((current) => event.target.checked ? [...current, property.id] : current.filter((id) => id !== property.id))}
+                                    className="mt-0.5 size-4 accent-[#173f5f]"
+                                  />
+                                  <span className="text-sm font-medium text-slate-800">
+                                    {property.name}
+                                    {property.groupName && <span className="block text-xs font-normal text-slate-500">{property.groupName}</span>}
+                                  </span>
+                                </label>
+                              ))}
+                            </div>
+                            <p className="text-xs text-muted-foreground">Enter the full bill amount. It will be divided evenly among the selected properties.</p>
+                          </div>
+                        )}
                         <div className="space-y-2">
                           <Label htmlFor="entry-date">Date</Label>
                           <Input id="entry-date" name="date" type="date" defaultValue={`${selectedMonth}-01`} required />
